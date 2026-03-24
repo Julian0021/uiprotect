@@ -1,5 +1,31 @@
 # Changelog
 
+## v10.2.3 (2026-03-24)
+
+### Bug fixes
+
+
+- Handle unknown enum values and keyerror in ws processing ([`c9dadf7`](https://github.com/uilibs/uiprotect/commit/c9dadf75f081281e4d547873af7d957ce3ae5fdc))
+
+
+- Handle unknown enum values and keyerror in ws processing ([`c9dadf7`](https://github.com/uilibs/uiprotect/commit/c9dadf75f081281e4d547873af7d957ce3ae5fdc))
+
+
+- Improve resilience in ws error handling by checking for pending refresh tasks ([`c9dadf7`](https://github.com/uilibs/uiprotect/commit/c9dadf75f081281e4d547873af7d957ce3ae5fdc))
+
+
+- Resolve deadlock in talkbackstream.stop() during concurrent playback ([`0a27948`](https://github.com/uilibs/uiprotect/commit/0a2794817b0b79164e6fa00b5b1747f67ed80973))
+
+
+- Resolve deadlock in talkbackstream.stop() during concurrent playback ([`0a27948`](https://github.com/uilibs/uiprotect/commit/0a2794817b0b79164e6fa00b5b1747f67ed80973))
+
+
+- Prevent start() from clearing a pending stop signal in talkbackstream ([`0a27948`](https://github.com/uilibs/uiprotect/commit/0a2794817b0b79164e6fa00b5b1747f67ed80973))
+
+
+- Coverage, add restart test (not that we do, but latent bug if we start doing that) ([`0a27948`](https://github.com/uilibs/uiprotect/commit/0a2794817b0b79164e6fa00b5b1747f67ed80973))
+
+
 ## v10.2.2 (2026-02-26)
 
 ### Bug fixes
