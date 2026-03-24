@@ -294,7 +294,10 @@ class TalkbackStream:
             if raise_if_running:
                 raise StreamError("Stream already started")
             return
-        self._stop_event.clear()
+        # Don't clear a pending stop signal — stop() sets the event before
+        # acquiring the lock, so a concurrent start() must not clobber it.
+        if self._stop_event.is_set():
+            return
         self._error = None
         self._thread = threading.Thread(
             target=self._stream_audio_sync,
@@ -316,11 +319,16 @@ class TalkbackStream:
 
     async def stop(self) -> None:
         """Stop the audio stream gracefully and wait for completion."""
+        # Signal the thread to stop BEFORE acquiring the lock.
+        # run_until_complete() holds the lock while awaiting thread.join(),
+        # so acquiring the lock first would deadlock when both are called
+        # concurrently (e.g. HA play_audio + stop from media player).
+        self._stop_event.set()
         async with self._lock:
-            self._stop_event.set()
             if self._thread is not None:
                 await self._wait_for_thread()
                 self._thread = None
+            self._stop_event.clear()
 
     async def run_until_complete(self) -> None:
         """Run the stream until it completes naturally."""
