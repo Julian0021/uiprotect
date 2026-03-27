@@ -158,6 +158,20 @@ async def mock_api_request(url: str, *args, **kwargs):
         return [read_json_file("sample_chime")]
     if url == "aiports":
         return [read_json_file("sample_aiport")]
+    if url.endswith("ptz/position"):
+        return {
+            "degree": {
+                "pan": 45.5,
+                "tilt": 10.0,
+                "zoom": 1.5,
+            },
+            "steps": {
+                "focus": 200,
+                "pan": 100,
+                "tilt": 100,
+                "zoom": 0,
+            },
+        }
     if url.endswith("ptz/preset"):
         return {
             "id": "test-id",

@@ -43,6 +43,7 @@ from uiprotect.data import (
     EventType,
     ModelType,
     PTZPatrol,
+    PTZPosition,
     PTZPreset,
     create_from_unifi_dict,
 )
@@ -3825,6 +3826,50 @@ async def test_api_request_list_invalid_type(simple_api_client, response_data):
 
 
 # PTZ Private API Tests
+
+
+@pytest.mark.asyncio
+async def test_get_position_ptz_camera(protect_client: ProtectApiClient):
+    """Test get_position_ptz_camera API method."""
+    mock_response: dict[str, Any] = {
+        "degree": {"pan": 45.5, "tilt": 10.0, "zoom": 1.5},
+        "steps": {"focus": 200, "pan": 100, "tilt": 150, "zoom": 20},
+    }
+    protect_client.api_request_obj = AsyncMock(return_value=mock_response)
+
+    position = await protect_client.get_position_ptz_camera("camera123")
+
+    assert isinstance(position, PTZPosition)
+    assert position.degree.pan == 45.5
+    assert position.steps.focus == 200
+    assert position.steps.pan == 100
+    assert position.steps.tilt == 150
+    assert position.steps.zoom == 20
+
+    protect_client.api_request_obj.assert_called_with("cameras/camera123/ptz/position")
+
+
+@pytest.mark.asyncio
+async def test_get_home_ptz_camera(protect_client: ProtectApiClient):
+    """Test get_home_ptz_camera API method."""
+    mock_response: dict[str, Any] = {
+        "id": "preset1",
+        "name": "Home",
+        "slot": -1,
+        "ptz": {"pan": 100, "tilt": 150, "zoom": 20},
+    }
+    protect_client.api_request_obj = AsyncMock(return_value=mock_response)
+
+    home = await protect_client.get_home_ptz_camera("camera123")
+
+    assert isinstance(home, PTZPreset)
+    assert home.name == "Home"
+    assert home.slot == -1
+    assert home.ptz.pan == 100
+    assert home.ptz.tilt == 150
+    assert home.ptz.zoom == 20
+
+    protect_client.api_request_obj.assert_called_with("cameras/camera123/ptz/home")
 
 
 @pytest.mark.asyncio

@@ -62,7 +62,13 @@ from .data import (
 )
 from .data.base import ProtectModelWithId
 from .data.devices import AiPort, Chime
-from .data.types import IteratorCallback, ProgressCallback, PTZPatrol, PTZPreset
+from .data.types import (
+    IteratorCallback,
+    ProgressCallback,
+    PTZPatrol,
+    PTZPosition,
+    PTZPreset,
+)
 from .exceptions import BadRequest, NotAuthorized, NvrError
 from .stream import TalkbackSession
 from .utils import (
@@ -2874,6 +2880,16 @@ class ProtectApiClient(BaseApiClient):
         return Chime.from_unifi_dict(**result, api=self)
 
     # PTZ Control Private API Methods
+
+    async def get_position_ptz_camera(self, device_id: str) -> PTZPosition:
+        """Get the current PTZ position for a camera."""
+        position = await self.api_request_obj(f"cameras/{device_id}/ptz/position")
+        return PTZPosition(**position)
+
+    async def get_home_ptz_camera(self, device_id: str) -> PTZPreset:
+        """Get the PTZ home preset for a camera."""
+        home = await self.api_request_obj(f"cameras/{device_id}/ptz/home")
+        return PTZPreset(**home)
 
     async def get_presets_ptz_camera(self, device_id: str) -> list[PTZPreset]:
         """Get PTZ Presets for camera."""

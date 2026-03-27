@@ -19,6 +19,8 @@ from uiprotect.data import (
     IRLEDMode,
     LCDMessage,
     PTZPatrol,
+    PTZPosition,
+    PTZPreset,
     RecordingMode,
     SmartDetectAudioType,
     VideoMode,
@@ -30,7 +32,11 @@ from uiprotect.data.devices import (
     HotplugExtender,
     WifiStats,
 )
-from uiprotect.data.types import DEFAULT, PermissionNode, SmartDetectObjectType
+from uiprotect.data.types import (
+    DEFAULT,
+    PermissionNode,
+    SmartDetectObjectType,
+)
 from uiprotect.data.websocket import WSAction, WSSubscriptionMessage
 from uiprotect.exceptions import BadRequest, NotAuthorized
 from uiprotect.utils import to_js_time
@@ -1668,6 +1674,32 @@ def test_camera_zone_color_serialization_from_dict() -> None:
 
 @pytest.mark.skipif(not TEST_CAMERA_EXISTS, reason="Missing testdata")
 @pytest.mark.parametrize(
+    "method",
+    [
+        "get_ptz_position",
+        "get_ptz_home",
+        "get_ptz_presets",
+        "get_ptz_patrols",
+        "get_current_ptz_preset",
+        "is_ptz_at_home",
+    ],
+)
+@pytest.mark.asyncio()
+async def test_camera_ptz_read_api_no_ptz(
+    camera_obj: Camera | None,
+    method: str,
+):
+    if camera_obj is None:
+        pytest.skip("No camera_obj obj found")
+
+    camera_obj.feature_flags.is_ptz = False
+
+    with pytest.raises(BadRequest, match="Camera does not support PTZ features"):
+        await getattr(camera_obj, method)()
+
+
+@pytest.mark.skipif(not TEST_CAMERA_EXISTS, reason="Missing testdata")
+@pytest.mark.parametrize(
     ("method", "args"),
     [
         ("ptz_goto_preset_public", {"slot": 0}),
@@ -1712,6 +1744,165 @@ def test_camera_is_ptz_patrolling(
 
     camera_obj.active_patrol_slot = active_patrol_slot
     assert camera_obj.is_ptz_patrolling is expected
+
+
+@pytest.mark.skipif(not TEST_CAMERA_EXISTS, reason="Missing testdata")
+@pytest.mark.asyncio()
+async def test_camera_get_ptz_position(ptz_camera: Camera | None):
+    if ptz_camera is None:
+        pytest.skip("No ptz_camera obj found")
+
+    ptz_camera.api.get_position_ptz_camera = AsyncMock(
+        return_value=PTZPosition(
+            degree={"pan": 45.5, "tilt": 10.0, "zoom": 1.5},
+            steps={"focus": 200, "pan": 100, "tilt": 150, "zoom": 20},
+        )
+    )
+
+    position = await ptz_camera.get_ptz_position()
+
+    assert isinstance(position, PTZPosition)
+    assert position.steps.pan == 100
+    assert position.steps.tilt == 150
+    assert position.steps.zoom == 20
+    ptz_camera.api.get_position_ptz_camera.assert_called_with(ptz_camera.id)
+
+
+@pytest.mark.skipif(not TEST_CAMERA_EXISTS, reason="Missing testdata")
+@pytest.mark.asyncio()
+async def test_camera_get_ptz_home(ptz_camera: Camera | None):
+    if ptz_camera is None:
+        pytest.skip("No ptz_camera obj found")
+
+    ptz_camera.api.get_home_ptz_camera = AsyncMock(
+        return_value=PTZPreset(
+            id="home",
+            name="Home",
+            slot=-1,
+            ptz={"pan": 100, "tilt": 150, "zoom": 20},
+        )
+    )
+
+    home = await ptz_camera.get_ptz_home()
+
+    assert isinstance(home, PTZPreset)
+    assert home.name == "Home"
+    assert home.slot == -1
+    assert home.ptz.pan == 100
+    assert home.ptz.tilt == 150
+    assert home.ptz.zoom == 20
+    ptz_camera.api.get_home_ptz_camera.assert_called_with(ptz_camera.id)
+
+
+@pytest.mark.skipif(not TEST_CAMERA_EXISTS, reason="Missing testdata")
+@pytest.mark.parametrize(
+    ("position_steps", "expected_name"),
+    [
+        ({"focus": 10, "pan": 100, "tilt": 150, "zoom": 20}, "Home"),
+        ({"focus": 20, "pan": 250, "tilt": 175, "zoom": 30}, "Front Door"),
+        ({"focus": 11, "pan": 100, "tilt": 150, "zoom": 20}, "Home"),
+        ({"focus": 21, "pan": 250, "tilt": 175, "zoom": 30}, "Front Door"),
+        ({"focus": 0, "pan": 999, "tilt": 999, "zoom": 999}, None),
+    ],
+)
+@pytest.mark.asyncio()
+async def test_camera_get_current_ptz_preset(
+    ptz_camera: Camera | None,
+    position_steps: dict[str, int],
+    expected_name: str | None,
+):
+    if ptz_camera is None:
+        pytest.skip("No ptz_camera obj found")
+
+    ptz_camera.api.get_position_ptz_camera = AsyncMock(
+        return_value=PTZPosition(
+            degree={"pan": 0.0, "tilt": 0.0, "zoom": 0.0},
+            steps=position_steps,
+        )
+    )
+    ptz_camera.api.get_home_ptz_camera = AsyncMock(
+        return_value=PTZPreset(
+            id="home",
+            name="Home",
+            slot=-1,
+            ptz={"pan": 100, "tilt": 150, "zoom": 20},
+        )
+    )
+    ptz_camera.api.get_presets_ptz_camera = AsyncMock(
+        return_value=[
+            PTZPreset(
+                id="front-door",
+                name="Front Door",
+                slot=0,
+                ptz={"pan": 250, "tilt": 175, "zoom": 30},
+            )
+        ]
+    )
+
+    preset = await ptz_camera.get_current_ptz_preset()
+
+    actual_name = preset.name if preset is not None else None
+    assert actual_name == expected_name
+    ptz_camera.api.get_position_ptz_camera.assert_called_with(ptz_camera.id)
+    ptz_camera.api.get_home_ptz_camera.assert_called_with(ptz_camera.id)
+    if expected_name == "Home":
+        assert not ptz_camera.api.get_presets_ptz_camera.called
+    else:
+        ptz_camera.api.get_presets_ptz_camera.assert_called_with(ptz_camera.id)
+
+
+@pytest.mark.skipif(not TEST_CAMERA_EXISTS, reason="Missing testdata")
+@pytest.mark.parametrize(
+    ("position_steps", "expected"),
+    [
+        ({"focus": 10, "pan": 100, "tilt": 150, "zoom": 20}, True),
+        ({"focus": 11, "pan": 100, "tilt": 150, "zoom": 20}, True),
+        ({"focus": 20, "pan": 250, "tilt": 175, "zoom": 30}, False),
+    ],
+)
+@pytest.mark.asyncio()
+async def test_camera_is_ptz_at_home(
+    ptz_camera: Camera | None,
+    position_steps: dict[str, int],
+    expected: bool,
+):
+    if ptz_camera is None:
+        pytest.skip("No ptz_camera obj found")
+
+    ptz_camera.api.get_position_ptz_camera = AsyncMock(
+        return_value=PTZPosition(
+            degree={"pan": 0.0, "tilt": 0.0, "zoom": 0.0},
+            steps=position_steps,
+        )
+    )
+    ptz_camera.api.get_home_ptz_camera = AsyncMock(
+        return_value=PTZPreset(
+            id="home",
+            name="Home",
+            slot=-1,
+            ptz={"pan": 100, "tilt": 150, "zoom": 20},
+        )
+    )
+    ptz_camera.api.get_presets_ptz_camera = AsyncMock(
+        return_value=[
+            PTZPreset(
+                id="front-door",
+                name="Front Door",
+                slot=0,
+                ptz={"pan": 250, "tilt": 175, "zoom": 30},
+            )
+        ]
+    )
+
+    is_at_home = await ptz_camera.is_ptz_at_home()
+
+    assert is_at_home is expected
+    ptz_camera.api.get_position_ptz_camera.assert_called_with(ptz_camera.id)
+    ptz_camera.api.get_home_ptz_camera.assert_called_with(ptz_camera.id)
+    if expected:
+        assert not ptz_camera.api.get_presets_ptz_camera.called
+    else:
+        ptz_camera.api.get_presets_ptz_camera.assert_called_with(ptz_camera.id)
 
 
 @pytest.mark.skipif(not TEST_CAMERA_EXISTS, reason="Missing testdata")

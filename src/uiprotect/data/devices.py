@@ -68,7 +68,9 @@ from .types import (
     PercentInt,
     PermissionNode,
     ProgressCallback,
+    PTZ_HOME_SLOT,
     PTZPatrol,
+    PTZPosition,
     PTZPreset,
     RecordingMode,
     RepeatTimes,
@@ -2786,24 +2788,63 @@ class Camera(ProtectMotionDeviceModel):
 
     # region PTZ
 
-    async def get_ptz_presets(self) -> list[PTZPreset]:
-        """Get PTZ Presets for camera."""
+    @staticmethod
+    def _ptz_preset_matches_position(
+        position: PTZPosition,
+        preset: PTZPreset,
+    ) -> bool:
+        return (
+            position.steps.pan == preset.ptz.pan
+            and position.steps.tilt == preset.ptz.tilt
+            and position.steps.zoom == preset.ptz.zoom
+        )
+
+    def _check_ptz(self) -> None:
+        """Check prerequisites for PTZ calls."""
         if not self.feature_flags.is_ptz:
             raise BadRequest("Camera does not support PTZ features.")
 
+    async def get_ptz_position(self) -> PTZPosition:
+        """Get the current PTZ position for camera."""
+        self._check_ptz()
+        return await self._api.get_position_ptz_camera(self.id)
+
+    async def get_ptz_home(self) -> PTZPreset:
+        """Get the PTZ home preset for camera."""
+        self._check_ptz()
+        return await self._api.get_home_ptz_camera(self.id)
+
+    async def get_ptz_presets(self) -> list[PTZPreset]:
+        """Get PTZ Presets for camera."""
+        self._check_ptz()
         return await self._api.get_presets_ptz_camera(self.id)
 
     async def get_ptz_patrols(self) -> list[PTZPatrol]:
         """Get PTZ Patrols for camera."""
-        if not self.feature_flags.is_ptz:
-            raise BadRequest("Camera does not support PTZ features.")
-
+        self._check_ptz()
         return await self._api.get_patrols_ptz_camera(self.id)
+
+    async def get_current_ptz_preset(self) -> PTZPreset | None:
+        """Get the current PTZ preset for camera."""
+        position = await self.get_ptz_position()
+        home = await self.get_ptz_home()
+        if self._ptz_preset_matches_position(position, home):
+            return home
+
+        for preset in await self.get_ptz_presets():
+            if self._ptz_preset_matches_position(position, preset):
+                return preset
+
+        return None
+
+    async def is_ptz_at_home(self) -> bool:
+        """Is PTZ camera currently at the home preset position?"""
+        preset = await self.get_current_ptz_preset()
+        return preset is not None and preset.slot == PTZ_HOME_SLOT
 
     def _check_ptz_public_api(self) -> None:
         """Check prerequisites for PTZ public API calls."""
-        if not self.feature_flags.is_ptz:
-            raise BadRequest("Camera does not support PTZ features.")
+        self._check_ptz()
 
     async def ptz_goto_preset_public(self, *, slot: int) -> None:
         """Move PTZ camera to preset position using public API."""
