@@ -40,6 +40,7 @@ from .base import (
 from .types import (
     DEFAULT,
     DEFAULT_TYPE,
+    PTZ_HOME_SLOT,
     AudioCodecs,
     AudioStyle,
     AutoExposureMode,
@@ -68,7 +69,6 @@ from .types import (
     PercentInt,
     PermissionNode,
     ProgressCallback,
-    PTZ_HOME_SLOT,
     PTZPatrol,
     PTZPosition,
     PTZPreset,
